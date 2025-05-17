@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  # NSQ Lookupd
+  nsqlookupd:
+    image: nsqio/nsq
+    command: /nsqlookupd
+    ports:
+      - "4160:4160"
+      - "4161:4161"
+
+  # NSQ Daemon
+  nsqd:
+    image: nsqio/nsq
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160
+    depends_on:
+      - nsqlookupd
+    ports:
+      - "4150:4150"
+
+  # TimescaleDB
+  timescaledb:
+    image: timescale/timescaledb:latest-pg12
+    environment:
+      POSTGRES_USER: metrics_user
+      POSTGRES_PASSWORD: metrics_password
+      POSTGRES_DB: metrics_db
+    ports:
+      - "5433:5432"  # Ensure this port is not in use
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    restart: always
+
+  # Loki (Log Aggregation)
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - observability_network
+
+  # Quickwit (Fast Log Search)
+  quickwit:
+    image: quickwit/quickwit:latest
+    ports:
+      - "7280:7280"
+    volumes:
+      - quickwit_data:/quickwit
+    command: |
+      run --config-uri=file:///quickwit/config/quickwit.yaml
+
+volumes:
+  timescaledb_data:
+  loki_data:
+  quickwit_data:
+
+networks:
+  observability_network:
+    external: true
